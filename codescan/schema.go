@@ -1064,6 +1064,45 @@ func parseJSONTag(field *ast.Field) (name string, ignore bool, isString bool, er
 	return name, false, false, nil
 }
 
+func parseFirstValidTag(field *ast.Field, tags ...string) (name string, ignore bool, isString bool, err error) {
+	if len(field.Names) > 0 {
+		name = field.Names[0].Name
+	}
+	if field.Tag == nil || len(strings.TrimSpace(field.Tag.Value)) == 0 {
+		return name, false, false, nil
+	}
+
+	tv, err := strconv.Unquote(field.Tag.Value)
+	if err != nil {
+		return name, false, false, err
+	}
+
+	if strings.TrimSpace(tv) == "" {
+		return name, false, false, nil
+	}
+
+	st := reflect.StructTag(tv)
+	for _, tag := range tags {
+		tagParts := tagOptions(strings.Split(st.Get(tag), ","))
+
+		if tagParts.Contain("string") {
+			// Need to check if the field type is a scalar. Otherwise, the
+			// ",string" directive doesn't apply.
+			isString = isFieldStringable(field.Type)
+		}
+
+		switch tagParts.Name() {
+		case "-":
+			return name, true, isString, nil
+		case "":
+			continue
+		default:
+			return tagParts.Name(), false, isString, nil
+		}
+	}
+	return name, false, isString, nil
+}
+
 // isFieldStringable check if the field type is a scalar. If the field type is
 // *ast.StarExpr and is pointer type, check if it refers to a scalar.
 // Otherwise, the ",string" directive doesn't apply.

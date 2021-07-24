@@ -332,25 +332,42 @@ func (p *parameterBuilder) buildFromStruct(decl *entityDecl, tpe *types.Struct, 
 			continue
 		}
 
-		name, ignore, _, err := parseJSONTag(afld)
-		if err != nil {
-			return err
-		}
-		if ignore {
-			continue
-		}
-
 		in := "query"
 		// scan for param location first, this changes some behavior down the line
 		if afld.Doc != nil {
+			outer:
 			for _, cmt := range afld.Doc.List {
 				for _, line := range strings.Split(cmt.Text, "\n") {
 					matches := rxIn.FindStringSubmatch(line)
 					if len(matches) > 0 && len(strings.TrimSpace(matches[1])) > 0 {
 						in = strings.TrimSpace(matches[1])
+						break outer
 					}
 				}
 			}
+		}
+
+		var (
+			name string
+			ignore bool
+			err error
+		)
+		const customTag = "swagger"
+		switch in {
+		case "query":
+			name, ignore, _, err = parseFirstValidTag(afld, customTag, "query", "json")
+		case "body":
+			name, ignore, _, err = parseFirstValidTag(afld, customTag, "json")
+		case "formData":
+			name, ignore, _, err = parseFirstValidTag(afld, customTag, "form", "json")
+		default:
+			name, ignore, _, err = parseFirstValidTag(afld, customTag, "json")
+		}
+		if err != nil {
+			return err
+		}
+		if ignore {
+			continue
 		}
 
 		ps := seen[name]
